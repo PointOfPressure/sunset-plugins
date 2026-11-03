@@ -35,7 +35,7 @@ In your module, `use super::sunset_api as api;`.
 | `api::turn_off(game, "Name")` | Turns a module off. |
 | `api::Module::new(name, category, about)` | Builds a module; then `.bool(name, default)`, `.num(name, default, min, max, step)`, `.pick(name, &[choices])`, `.text(name, default)` add settings. |
 | `m.b("x")`, `m.n("x")`, `m.p("x")`, `m.t("x")` | Read a bool, number, choice or text setting. |
-| `api::Category` | `Combat`, `Movement`, `Player`, `Render`, `World`. |
+| `api::Category` | `Combat`, `Movement`, `Player`, `Render`, `World`, `Client` (not cheats: the client's own settings; it was `Extras` before 0.9). |
 
 Helpers Meteor's own modules use, so a plugin can place blocks and pick targets the same way:
 
