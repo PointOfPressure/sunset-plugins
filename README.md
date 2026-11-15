@@ -1,7 +1,8 @@
 # Sunset plugin API (version 2)
 
-For [Sunset](https://github.com/PointOfPressure/sunset-client) 0.9 on Horizon `ba6344a`. Everything in this repo is
-MIT: copy it, change it, ship your plugin under whatever licence you like.
+For [Sunset](https://github.com/PointOfPressure/sunset-client) 1.2.0 on Horizon Nightly `9f42064` (the API is the
+same since Sunset 0.9). Everything in this repo is MIT: copy it, change it, ship your plugin under whatever licence
+you like.
 
 A Sunset plugin is a small Rust file that adds modules, commands and event handlers to Sunset: anything a built-in
 module does (settings in the click GUI, key binds, ticks, packets, HUD and world drawing, friends, saved data) goes
@@ -38,7 +39,7 @@ autowave/
 ```
 
 The id (here `autowave`) must be the same in all of them: `tools/new.py` does that for you. Both manifests name the
-Horizon commit Sunset is built for (`ba6344a59cb9e755b730dcf02285fc0d33b97d3c` for Sunset 0.9).
+Horizon commit Sunset is built for (`9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0` for Sunset 1.2.0).
 
 ## The template
 
