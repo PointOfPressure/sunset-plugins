@@ -4,9 +4,9 @@ For [Sunset](https://github.com/PointOfPressure/sunset-client) on Horizon `9f420
 Everything in this repo is MIT: copy it, change it, ship your plugin under whatever licence you like.
 
 API 3 is supplied by the pending Baritone integration in Sunset's [`pr37-port`](https://github.com/PointOfPressure/sunset-client/tree/pr37-port)
-branch. Main at `1e4fb18` still supplies API 2. Until that integration lands, use an API 3 Sunset build for this
-template and these examples; updating the SDK alone does not update the API inside Sunset. Existing plugins
-requiring API 1 or 2 keep their calls on API 3.
+branch. Main at `1e4fb18` still supplies API 2. The template and examples use only API 2 calls and declare
+`needs(2)`, so they work on both branches. Declare `needs(3)` when using the optional Baritone service below;
+updating the SDK alone does not update the API inside Sunset. Existing API 1 and 2 calls remain available on API 3.
 
 A Sunset plugin is a small Rust file that adds modules, commands and event handlers to Sunset: anything a built-in
 module does (settings in the click GUI, key binds, ticks, packets, HUD and world drawing, friends, saved data) goes
@@ -58,8 +58,8 @@ horizon-mixins to `e59da9094f0c2fdda6c627fe9eff22dec6a906f0`; keep it aligned wi
 use super::Game;
 use super::sunset_api as api;
 
-// A Sunset older than plugin API 3 stops the build here with "update Sunset".
-const _: () = api::needs(3);
+// This template only uses API 2 calls; use needs(3) if you add an API 3 Baritone service call.
+const _: () = api::needs(2);
 
 const ID: &str = "myplugin";
 const NAME: &str = "My Module";
@@ -110,8 +110,8 @@ Ticks are 20 a second. Positions are `[x, y, z]` (`f64` for places, `i32` for bl
 
 | Call | What it does |
 | --- | --- |
-| `api::API_VERSION` | `3`. Plugins requiring 1 or 2 keep their existing calls. |
-| `const _: () = api::needs(3);` | Put at the top of plugin.rs: on an older Sunset the build stops with "update Sunset". |
+| `api::API_VERSION` | The host's API version: 2 on current main, 3 with the Baritone integration. |
+| `const _: () = api::needs(2);` | Declare the minimum your calls need: 2 for the template and examples, 3 for the Baritone service. An older host stops the build with "update Sunset". |
 | `api::plugin(game, id, version, setup)` | Registers your plugin the first time (runs `setup`); later calls do nothing. Call it from `tick`. `id`: your mod's id. |
 | `p.id()` | Your plugin's id, inside `setup`. |
 | `api::running()` | Whether Sunset is still running. Direct native hooks must return without acting once this is false. |
@@ -119,6 +119,7 @@ Ticks are 20 a second. Positions are `[x, y, z]` (`f64` for places, `i32` for bl
 ### Optional Baritone provider (API 3)
 
 API 3 adds `BaritoneCallV1`, `BaritoneFullV1`, `BaritoneServiceV1`, `register_baritone` and `baritone_service`.
+Code using these names must declare `const _: () = api::needs(3);` and build with an API 3 host.
 Ordinary plugins do not need to register a provider. The Baritone companion supplies one during its plugin setup;
 there is only one provider per game process, and duplicate registration is an error, including the same provider
 twice. Register during client-only setup; registration requires an active plugin callback context and also fails
@@ -203,7 +204,7 @@ p.command("wave", "wave at someone: .wave <name>", |game, args| {
 
 `.wave Steve` runs it with `args = ["Steve"]`. The second text is the line `.help` shows. Names must be 1 to 32 ASCII
 letters, digits, `_` or `-`. Names already used by another plugin and Sunset's built-in names are refused with
-a chat line, ignoring case. The reserved built-in names are:
+a chat line, ignoring case. The API 3 host reserves these built-in names:
 
 ```text
 auradebug scan goto help commands menu gui pages toggle t modules list settings
@@ -212,7 +213,8 @@ presets reset friend friends f loadout loadouts waypoint waypoints wp vclip hcli
 plugins baritone b
 ```
 
-`seed` belongs to Ore Sim; `baritone` and `b` belong to Baritone. Use a distinct command such as `myplugin-seed`.
+API 3 additionally reserves `seed` for Ore Sim and `baritone`/`b` for Baritone. Keep these names free even when
+targeting API 2 so your commands still work after updating Sunset; use a name such as `myplugin-seed` instead.
 
 ### Events
 
@@ -402,7 +404,8 @@ Everything else in the folder comes from `tools/new.py`.
 
 ## Building without the launcher
 
-To check that a plugin compiles, stage it with an API 3 Sunset using [horizon-mixins](https://github.com/horizon-rust/horizon-mixins)
+To check that a plugin compiles, stage it with Sunset using [horizon-mixins](https://github.com/horizon-rust/horizon-mixins)
 at the pins above and run `cargo check --locked -p horizon-client -p horizon-client-lib` in the staged workspace.
 This checks the client gameplay code containing your plugin and Sunset's shared-library hooks.
+Use an API 3 host when your plugin uses the Baritone service; the supplied template and examples also build on API 2.
 `python3 tools/pack.py <folder>` only packs `dist/<id>-<version>.hnmod`.

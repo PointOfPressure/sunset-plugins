@@ -1,4 +1,4 @@
-// AFK Fisher, an example Sunset plugin (plugin API 3) for unattended play: it turns on Sunset's Auto Fish, counts the
+// AFK Fisher, an example Sunset plugin (plugin API 2/3) for unattended play: it turns on Sunset's Auto Fish, counts the
 // fish, and when something is wrong (low health, death, a player coming near) stops everything and logs out. Horizon's
 // Auto-reconnect brings you back after a server restart, and the fishing goes on.
 
@@ -6,7 +6,8 @@ use super::Game;
 use super::sunset_api as api;
 use std::sync::Mutex;
 
-const _: () = api::needs(3);
+// These calls need API 2 and also work on API 3.
+const _: () = api::needs(2);
 
 const ID: &str = "afk";
 const NAME: &str = "AFK Fisher";

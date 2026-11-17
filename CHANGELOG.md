@@ -3,11 +3,11 @@
 ## Plugin API 3 (pending Sunset Baritone integration)
 
 - Template and both examples target Horizon `9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0`, horizon-mixins
-  `e59da9094f0c2fdda6c627fe9eff22dec6a906f0`, and require plugin API 3 at compile time.
+  `e59da9094f0c2fdda6c627fe9eff22dec6a906f0`. They retain their actual API 2 minimum and work on API 2 or 3 hosts.
 - Document the optional Baritone provider table, registration rules and its separate version 1 service protocol.
   Existing API 1 and 2 calls remain available.
 - Document `running()` and permanent Panic cleanup, plus the reserved `seed`, `baritone` and `b` commands.
-- API 3 currently requires Sunset's `pr37-port` integration; main at `1e4fb18` still exposes API 2.
+- API 3 service calls require Sunset's `pr37-port` integration; main at `1e4fb18` still exposes API 2.
 - `build.py` explicitly builds the instance it installed into and passes the same game-data root to the launcher,
   so a different selected instance no longer redirects the build.
 

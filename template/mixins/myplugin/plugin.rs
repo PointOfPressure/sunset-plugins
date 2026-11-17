@@ -3,8 +3,8 @@
 use super::Game;
 use super::sunset_api as api;
 
-// A Sunset older than plugin API 3 stops the build here with "update Sunset".
-const _: () = api::needs(3);
+// This template only uses API 2 calls; use needs(3) if you add an API 3 Baritone service call.
+const _: () = api::needs(2);
 
 const ID: &str = "myplugin";
 const NAME: &str = "My Module";
