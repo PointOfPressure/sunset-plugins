@@ -38,6 +38,12 @@ Before it installs anything, `build.py` checks the plugin against the installed 
 API. If either differs it stops and says which file to change or what to update. `--check` stops after that check;
 `--sunset <path>` checks against a Sunset checkout or `.hnmod` instead of the installed one.
 
+Then it asks before installing: a plugin is native code that runs inside the game with full access to your
+computer (files, accounts, network), with no sandbox. Answer `y` only for a plugin you wrote, read or trust. `--yes`
+(or `SUNSET_YES=1`) answers for scripts; without a terminal and without `--yes` it installs nothing. Sunset itself
+can't ask: by the time it runs, the plugin is already compiled into the game. Sunset's install script asks the
+same before it builds other native mods that are already installed.
+
 ## What a plugin is
 
 A folder with four files:

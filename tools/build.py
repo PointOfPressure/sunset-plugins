@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # Packs a plugin, installs it next to Sunset and builds the game with it:
-#   tools/build.py <plugin folder> [--no-build] [--check] [--sunset <Sunset checkout or .hnmod>]
+#   tools/build.py <plugin folder> [--no-build] [--check] [--yes] [--sunset <Sunset checkout or .hnmod>]
 # The folder holds horizon-native.json and mixins/<id>/ (as examples/hello-plugin). Needs Sunset installed (its
 # install script) and the Horizon launcher (horizon-launcher on the PATH, or HORIZON_LAUNCHER=/path/to/it).
 # Before anything is installed it checks the plugin against the installed Sunset (or --sunset): the same Horizon
-# revision, and no newer plugin API than Sunset has. --check stops after that check.
+# revision, and no newer plugin API than Sunset has. --check stops after that check. It then asks before installing
+# (a plugin is native code with full access to the computer); --yes or SUNSET_YES=1 answers yes for scripts.
 import json, os, pathlib, platform, re, shutil, subprocess, sys, zipfile
 
 argv = sys.argv[1:]
@@ -17,7 +18,7 @@ if "--sunset" in argv:
     del argv[i:i + 2]
 args = [a for a in argv if not a.startswith("--")]
 if not args:
-    sys.exit("Usage: tools/build.py <plugin folder> [--no-build] [--check] [--sunset <path>]   "
+    sys.exit("Usage: tools/build.py <plugin folder> [--no-build] [--check] [--yes] [--sunset <path>]   "
              "e.g. tools/build.py examples/hello-plugin")
 plugin = pathlib.Path(args[0]).resolve()
 try:
@@ -106,6 +107,19 @@ if not sunset_arg:
         check_against(m)
     if "--check" in argv:
         sys.exit(0)
+# Sunset can't ask: by the time it runs, the plugin's code is already compiled into the game. So ask here.
+if "--yes" not in argv and "-y" not in argv and os.environ.get("SUNSET_YES") != "1":
+    print(f"\n{pid} {version} ({plugin}) is a native plugin: once built in, it runs inside the game as native code "
+          "with full access to your computer (your files, accounts and network), with no sandbox. Install it only "
+          "if you wrote it, read its source, or trust its author.")
+    if not sys.stdin or not sys.stdin.isatty():
+        sys.exit(f"No terminal to ask on: run this again with --yes to install {pid}. Nothing was installed.")
+    try:
+        answer = input(f"Install {pid} and build it into the game? [y/N] ")
+    except EOFError:
+        answer = ""
+    if answer.strip().lower() not in ("y", "yes"):
+        sys.exit(f"Not installed: {pid}.")
 out = pathlib.Path(__file__).resolve().parent.parent / "dist" / f"{pid}-{version}.hnmod"
 out.parent.mkdir(exist_ok=True)
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:

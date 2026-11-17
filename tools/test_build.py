@@ -59,9 +59,15 @@ class BuildTests(unittest.TestCase):
         self.assertIn(code, (None, 0))
         return launcher
 
-    def run_raw(self, env, *args):
-        """Runs build.py; gives the mocked launcher, the exit code or message, and what it printed."""
+    def run_raw(self, env, *args, answer=None, tty=True):
+        """Runs build.py; gives the mocked launcher, the exit code or message, and what it printed. Without an
+        `answer` it runs with --yes; with one, that is typed at the install question (on a terminal if `tty`)."""
+        if answer is None:
+            args = (*args, "--yes")
+        stdin = io.StringIO(answer or "")
+        stdin.isatty = lambda: tty
         with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", [str(self.script), str(self.plugin), *args]), \
+             patch.object(sys, "stdin", stdin), \
              patch("platform.system", return_value="Windows"), patch("subprocess.Popen") as launcher, \
              contextlib.redirect_stdout(io.StringIO()) as printed:
             launcher.return_value.stdout = iter(line + "\n" for line in getattr(self, "output", []))
@@ -211,7 +217,7 @@ class BuildTests(unittest.TestCase):
         self.assertFalse((mods / "wave.hnmod").exists())
 
     def test_sunset_flag_without_a_path(self):
-        _, code, _ = self.run_raw({}, "--sunset")
+        _, code, _ = self.run_raw({}, "--sunset", answer="")
         self.assertIn("--sunset needs a path", code)
 
     # ---- what a failed build says
@@ -297,6 +303,63 @@ error: could not compile `horizon-client` (lib) due to 2 previous errors
         _, printed = self.failed_build(["newwave was left out: made for another Horizon version",
                                         "wave2 was left out: made for another Horizon version"])
         self.assertIn("Built.", printed)
+
+    # ---- the install question
+
+    def asked(self, answer, *args, tty=True, env=None):
+        mods = self.mods(self.game)
+        launcher, code, printed = self.run_raw({"HORIZON_HOME": str(self.game), "HORIZON_LAUNCHER": "mock-launcher",
+                                                **(env or {})}, *args, answer=answer, tty=tty)
+        return mods, launcher, code, printed
+
+    def test_question_names_the_plugin_and_native_code(self):
+        mods, launcher, code, printed = self.asked("n\n")
+        self.assertIn("wave 0.1.0", printed)
+        self.assertIn("native code with full access to your computer", printed)
+        self.assertIn("Install wave and build it into the game? [y/N]", printed)
+        self.assertEqual(code, "Not installed: wave.")
+        self.assertFalse((mods / "wave.hnmod").exists())
+        launcher.assert_not_called()
+
+    def test_empty_answer_or_eof_is_no(self):
+        for answer in ("\n", ""):
+            shutil.rmtree(self.game, ignore_errors=True)
+            mods, launcher, code, _ = self.asked(answer)
+            self.assertEqual(code, "Not installed: wave.")
+            self.assertFalse((mods / "wave.hnmod").exists())
+
+    def test_yes_installs_and_builds(self):
+        for answer in ("y\n", "YES\n", " yes \n"):
+            shutil.rmtree(self.game, ignore_errors=True)
+            _, launcher, code, _ = self.asked(answer)
+            self.assertIn(code, (None, 0))
+            launcher.assert_called_once()
+            self.assert_installed(self.game)
+
+    def test_no_terminal_without_yes_stops(self):
+        mods, launcher, code, _ = self.asked("y\n", tty=False)
+        self.assertIn("No terminal to ask on: run this again with --yes", code)
+        self.assertFalse((mods / "wave.hnmod").exists())
+        launcher.assert_not_called()
+
+    def test_yes_flag_and_env_skip_the_question(self):
+        for args, env in ((("--yes",), {}), (("-y",), {}), ((), {"SUNSET_YES": "1"})):
+            shutil.rmtree(self.game, ignore_errors=True)
+            _, launcher, code, printed = self.asked("", *args, tty=False, env=env)
+            self.assertIn(code, (None, 0))
+            self.assertNotIn("[y/N]", printed)
+            self.assert_installed(self.game)
+
+    def test_refused_check_asks_nothing(self):
+        self.set_plugin(horizon=OTHER, toml_rev=OTHER)
+        _, _, code, printed = self.asked("y\n")
+        self.assertIn("pins Horizon", code)
+        self.assertNotIn("[y/N]", printed)
+
+    def test_check_only_asks_nothing(self):
+        _, _, code, printed = self.asked("", "--check", tty=False)
+        self.assertEqual(code, 0)
+        self.assertNotIn("native code", printed)
 
 
 if __name__ == "__main__":
