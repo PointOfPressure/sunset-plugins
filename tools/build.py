@@ -40,9 +40,12 @@ elif system == "Darwin":
     data = pathlib.Path.home() / "Library" / "Application Support" / "horizon"
 else:
     data = pathlib.Path(os.environ.get("XDG_DATA_HOME", pathlib.Path.home() / ".local" / "share")) / "horizon"
+data = data.resolve()
 homes = [h for h in (data, data / "instances" / "native-mods") if (h / "horizon-native-mods").is_dir()]
 if not homes:
     sys.exit(f"No horizon-native-mods folder under {data}: install Sunset first (its install script), then run this again.")
+# The launcher otherwise builds whichever instance the user last selected, which may not have this plugin.
+instance = "native-mods" if data / "instances" / "native-mods" in homes else "horizon"
 for h in homes:
     mods = h / "horizon-native-mods"
     for old in mods.glob(f"{pid}-*.hnmod"):
@@ -58,10 +61,13 @@ if "--no-build" in sys.argv:
 launcher = os.environ.get("HORIZON_LAUNCHER") or shutil.which("horizon-launcher")
 if not launcher:
     sys.exit("Installed. Now build the game with it: the launcher's Settings > Game > Native mods > Build, or "
-             "`horizon-launcher native-build --trust-native-code` (set HORIZON_LAUNCHER to the launcher's path to do it from here).")
-print("Building the game with Sunset and your plugin (this takes a while)...")
-result = subprocess.run([launcher, "native-build", "--trust-native-code"])
+             f"`horizon-launcher native-build --instance {instance} --trust-native-code` "
+             "(set HORIZON_LAUNCHER to the launcher's path to do it from here).")
+print(f"Building the game for instance {instance} with Sunset and your plugin (this takes a while)...")
+# Match the folder we installed into even when the launcher has a configured data location of its own.
+result = subprocess.run([launcher, "native-build", "--instance", instance, "--trust-native-code"],
+                        env={**os.environ, "HORIZON_HOME": str(data)})
 if result.returncode != 0:
     sys.exit("The build failed. Read the first `error[...]` above: it names the file and line in your plugin.rs. "
              "'made for different Horizon revisions': your horizon_revision (in both manifests) must be Sunset's.")
-print("Built. Start the game from the launcher's Native mods instance; .plugins lists your plugin.")
+print(f"Built. Start the game from the launcher's {instance} instance; .plugins lists your plugin.")

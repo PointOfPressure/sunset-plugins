@@ -1,7 +1,12 @@
-# Sunset plugin API (version 2)
+# Sunset plugin API (version 3)
 
-For [Sunset](https://github.com/PointOfPressure/sunset-client) 0.9 on Horizon `ba6344a`. Everything in this repo is
-MIT: copy it, change it, ship your plugin under whatever licence you like.
+For [Sunset](https://github.com/PointOfPressure/sunset-client) on Horizon `9f42064`, with horizon-mixins `e59da909`.
+Everything in this repo is MIT: copy it, change it, ship your plugin under whatever licence you like.
+
+API 3 is supplied by the pending Baritone integration in Sunset's [`pr37-port`](https://github.com/PointOfPressure/sunset-client/tree/pr37-port)
+branch. Main at `1e4fb18` still supplies API 2. The template and examples use only API 2 calls and declare
+`needs(2)`, so they work on both branches. Declare `needs(3)` when using the optional Baritone service below;
+updating the SDK alone does not update the API inside Sunset. Existing API 1 and 2 calls remain available on API 3.
 
 A Sunset plugin is a small Rust file that adds modules, commands and event handlers to Sunset: anything a built-in
 module does (settings in the click GUI, key binds, ticks, packets, HUD and world drawing, friends, saved data) goes
@@ -24,6 +29,10 @@ python3 tools/build.py plugins/autowave       # packs it, installs it next to Su
 `HORIZON_LAUNCHER=/path/to/horizon-launcher`). Without the launcher it installs the plugin and tells you to press
 Settings > Game > Native mods > Build. In the game, `.plugins` lists your plugin and `.help` its command.
 
+The build targets the installed `native-mods` instance when present, otherwise the root `horizon` instance,
+even if another instance is selected in the launcher. Set `HORIZON_HOME` when your game data lives elsewhere;
+the same root is passed to the launcher. Use `--no-build` to install without starting a build.
+
 ## What a plugin is
 
 A folder with four files:
@@ -38,7 +47,8 @@ autowave/
 ```
 
 The id (here `autowave`) must be the same in all of them: `tools/new.py` does that for you. Both manifests name the
-Horizon commit Sunset is built for (`ba6344a59cb9e755b730dcf02285fc0d33b97d3c` for Sunset 0.9).
+Horizon commit Sunset is built for (`9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0` here). The JSON manifest also pins
+horizon-mixins to `e59da9094f0c2fdda6c627fe9eff22dec6a906f0`; keep it aligned with Sunset's `horizon-native.json`.
 
 ## The template
 
@@ -48,7 +58,7 @@ Horizon commit Sunset is built for (`ba6344a59cb9e755b730dcf02285fc0d33b97d3c` f
 use super::Game;
 use super::sunset_api as api;
 
-// A Sunset older than plugin API 2 stops the build here with "update Sunset".
+// This template only uses API 2 calls; use needs(3) if you add an API 3 Baritone service call.
 const _: () = api::needs(2);
 
 const ID: &str = "myplugin";
@@ -100,10 +110,53 @@ Ticks are 20 a second. Positions are `[x, y, z]` (`f64` for places, `i32` for bl
 
 | Call | What it does |
 | --- | --- |
-| `api::API_VERSION` | `2`. A new version only adds things: plugins made for 1 or 2 keep working. |
-| `const _: () = api::needs(2);` | Put at the top of plugin.rs: on an older Sunset the build stops with "update Sunset". |
+| `api::API_VERSION` | The host's API version: 2 on current main, 3 with the Baritone integration. |
+| `const _: () = api::needs(2);` | Declare the minimum your calls need: 2 for the template and examples, 3 for the Baritone service. An older host stops the build with "update Sunset". |
 | `api::plugin(game, id, version, setup)` | Registers your plugin the first time (runs `setup`); later calls do nothing. Call it from `tick`. `id`: your mod's id. |
 | `p.id()` | Your plugin's id, inside `setup`. |
+| `api::running()` | Whether Sunset is still running. Direct native hooks must return without acting once this is false. |
+
+### Optional Baritone provider (API 3)
+
+API 3 adds `BaritoneCallV1`, `BaritoneFullV1`, `BaritoneServiceV1`, `register_baritone` and `baritone_service`.
+Code using these names must declare `const _: () = api::needs(3);` and build with an API 3 host.
+Ordinary plugins do not need to register a provider. The Baritone companion supplies one during its plugin setup;
+there is only one provider per game process, and duplicate registration is an error, including the same provider
+twice. Register during client-only setup; registration requires an active plugin callback context and also fails
+after Sunset stops or when `service.version != 1`.
+
+`BaritoneServiceV1` is a copyable table of host-side Rust function pointers:
+
+```rust
+pub struct BaritoneServiceV1 {
+    pub version: u32, // 1: the service protocol, separate from plugin API version 3
+    pub call: BaritoneCallV1,
+    pub available: for<'a, 'b> fn(&'a Game<'b>) -> bool,
+    pub cancel: fn(),
+    pub full: Option<BaritoneFullV1>,
+}
+
+pub type BaritoneCallV1 = for<'a, 'b> fn(
+    game: &'a Game<'b>, operation: u32, request: &[u8],
+) -> Result<Vec<u8>, String>;
+
+pub struct BaritoneFullV1 {
+    pub command: for<'a, 'b> fn(&'a mut Game<'b>, &str) -> Result<(), String>,
+    pub stop: for<'a, 'b> fn(&'a mut Game<'b>),
+    pub status: fn() -> Option<String>,
+}
+```
+
+`api::baritone_service()` returns `Option<api::BaritoneServiceV1>`. A provider can be absent, unavailable for the
+current game, or present without the optional `full` runtime. Check `api::running()` and `(service.available)(game)`
+before starting ordinary work or commands. Still call the provider's cancellation/stop cleanup when Sunset stops
+or availability is lost. `register_baritone(service)` returns `Result<(), &'static str>`.
+
+The provider owns the engine library and must never retain a borrowed `Game` after a call returns. This Rust table
+is used inside the compiled native client; its byte requests follow the versioned engine protocol. Use the
+matching [Baritone source and ABI](https://github.com/PointOfPressure/sunset-client/tree/pr37-port/mixins/baritone)
+for operation numbers and request layouts. Stop owned jobs and workers in `on_stop`; do not block that handler on
+a worker waiting for the game thread.
 
 ### Modules and settings
 
@@ -149,8 +202,19 @@ p.command("wave", "wave at someone: .wave <name>", |game, args| {
 });
 ```
 
-`.wave Steve` runs it with `args = ["Steve"]`. The second text is the line `.help` shows. Sunset's own command names
-(`set`, `t`, `friend`...) and names with spaces are refused with a chat line.
+`.wave Steve` runs it with `args = ["Steve"]`. The second text is the line `.help` shows. Names must be 1 to 32 ASCII
+letters, digits, `_` or `-`. Names already used by another plugin and Sunset's built-in names are refused with
+a chat line, ignoring case. The API 3 host reserves these built-in names:
+
+```text
+auradebug scan goto help commands menu gui pages toggle t modules list settings
+get set seed movementpreset bind binds panic debug profile profiles config cfg preset
+presets reset friend friends f loadout loadouts waypoint waypoints wp vclip hclip
+plugins baritone b
+```
+
+API 3 additionally reserves `seed` for Ore Sim and `baritone`/`b` for Baritone. Keep these names free even when
+targeting API 2 so your commands still work after updating Sunset; use a name such as `myplugin-seed` instead.
 
 ### Events
 
@@ -190,6 +254,12 @@ them a tick later.
 
 If a handler, command or task panics, your plugin is switched off (all its handlers, commands and tasks) and chat
 says where; `.plugins` shows why. The game goes on.
+
+The `.panic` command permanently stops Sunset for the rest of the game process. Plugin handlers, commands and
+tasks stop, and guarded action helpers refuse further work. A callback already executing returns normally;
+`on_stop` runs after dispatch releases it. Direct native hooks and background workers are your responsibility:
+check `api::running()` and release your resources in `on_stop`. A process restart is required to run Sunset again.
+`api::stop_everything` is the separate reusable stop described below; it does not permanently stop Sunset.
 
 ### Drawing
 
@@ -335,5 +405,7 @@ Everything else in the folder comes from `tools/new.py`.
 ## Building without the launcher
 
 To check that a plugin compiles, stage it with Sunset using [horizon-mixins](https://github.com/horizon-rust/horizon-mixins)
-on Horizon's source at the pinned commit and run `cargo check -p horizon-client`. `python3 tools/pack.py <folder>` only
-packs `dist/<id>-<version>.hnmod`.
+at the pins above and run `cargo check --locked -p horizon-client -p horizon-client-lib` in the staged workspace.
+This checks the client gameplay code containing your plugin and Sunset's shared-library hooks.
+Use an API 3 host when your plugin uses the Baritone service; the supplied template and examples also build on API 2.
+`python3 tools/pack.py <folder>` only packs `dist/<id>-<version>.hnmod`.
