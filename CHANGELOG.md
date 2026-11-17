@@ -1,5 +1,14 @@
 # Changelog
 
+## Pre-launch (17 Nov 2026, API 2, Sunset after 1.2.1)
+
+- `api::forget(game, ID, key)` and `api::forget_all(game, ID)` delete saved data (one key, or all of a plugin's).
+  Same API number; an older Sunset fails the build with `cannot find function forget`.
+- `build.py` checks the plugin's `horizon_revision` and `api::needs` against the installed Sunset before installing
+  (`--check`, `--sunset <path>`), asks before installing native code (`--yes` for scripts), and when the launcher
+  leaves a plugin that doesn't compile out of the game, prints the plugin file, line and error.
+- Sunset main: plugins' `on_chat` sees players' chat again on Horizon 9f42064.
+
 ## Plugin API 3 (pending Sunset Baritone integration)
 
 - Template and both examples target Horizon `9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0`, horizon-mixins
