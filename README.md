@@ -33,6 +33,11 @@ The build targets the installed `native-mods` instance when present, otherwise t
 even if another instance is selected in the launcher. Set `HORIZON_HOME` when your game data lives elsewhere;
 the same root is passed to the launcher. Use `--no-build` to install without starting a build.
 
+Before it installs anything, `build.py` checks the plugin against the installed Sunset (`sunset.hnmod`): its
+`horizon_revision` must be Sunset's Horizon revision, and its `api::needs(N)` must be no higher than Sunset's plugin
+API. If either differs it stops and says which file to change or what to update. `--check` stops after that check;
+`--sunset <path>` checks against a Sunset checkout or `.hnmod` instead of the installed one.
+
 ## What a plugin is
 
 A folder with four files:
@@ -384,7 +389,8 @@ p.on_join(|game| if api::is_on("My AFK") { api::chat(game, "back in after a reco
 
 | You see | Do this |
 | --- | --- |
-| `this plugin needs a newer Sunset plugin API...` while building | Update Sunset (its install script), then build again. |
+| `x pins Horizon ... but Sunset ... is built for ...` (build.py) | Set both pins to the revision it prints, or update Sunset or this SDK so they match. |
+| `x needs plugin API N ... but Sunset ... has plugin API M` (build.py), or `this plugin needs a newer Sunset plugin API...` while building | Update Sunset (its install script), then build again; or use only API M calls and declare `needs(M)`. |
 | `made for different Horizon revisions` | Set `horizon_revision` (horizon-mixin.toml) and `horizon` (horizon-native.json) to the commit in Sunset's `horizon-native.json`. |
 | `cannot find function ... in module api` | Check the name in this page; `api::` calls need `use super::sunset_api as api;`. |
 | `expected closure that takes 2 arguments` | The handler takes the arguments its row above shows: `\|game, args\|` for a command, `\|game\|` for a tick. |

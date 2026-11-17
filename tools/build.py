@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
-# Packs a plugin, installs it next to Sunset and builds the game with it: tools/build.py <plugin folder> [--no-build]
+# Packs a plugin, installs it next to Sunset and builds the game with it:
+#   tools/build.py <plugin folder> [--no-build] [--check] [--sunset <Sunset checkout or .hnmod>]
 # The folder holds horizon-native.json and mixins/<id>/ (as examples/hello-plugin). Needs Sunset installed (its
 # install script) and the Horizon launcher (horizon-launcher on the PATH, or HORIZON_LAUNCHER=/path/to/it).
-import json, os, pathlib, platform, shutil, subprocess, sys, zipfile
+# Before anything is installed it checks the plugin against the installed Sunset (or --sunset): the same Horizon
+# revision, and no newer plugin API than Sunset has. --check stops after that check.
+import json, os, pathlib, platform, re, shutil, subprocess, sys, zipfile
 
-args = [a for a in sys.argv[1:] if not a.startswith("--")]
+argv = sys.argv[1:]
+sunset_arg = None
+if "--sunset" in argv:
+    i = argv.index("--sunset")
+    if i + 1 >= len(argv):
+        sys.exit("--sunset needs a path: a Sunset checkout (with horizon-native.json) or its .hnmod.")
+    sunset_arg = pathlib.Path(argv[i + 1]).resolve()
+    del argv[i:i + 2]
+args = [a for a in argv if not a.startswith("--")]
 if not args:
-    sys.exit("Usage: tools/build.py <plugin folder> [--no-build]   e.g. tools/build.py examples/hello-plugin")
+    sys.exit("Usage: tools/build.py <plugin folder> [--no-build] [--check] [--sunset <path>]   "
+             "e.g. tools/build.py examples/hello-plugin")
 plugin = pathlib.Path(args[0]).resolve()
 try:
     manifest = json.loads((plugin / "horizon-native.json").read_text())
@@ -20,15 +32,56 @@ if missing:
 toml = (src / "horizon-mixin.toml").read_text()
 if f'id = "{pid}"' not in toml or f'version = "{version}"' not in toml:
     sys.exit(f"horizon-mixin.toml's [mod] id and version must be the same as horizon-native.json's ({pid} {version}).")
+revision = re.search(r'^\s*horizon_revision\s*=\s*"([^"]*)"', toml, re.M)
+revision = revision.group(1) if revision else None
+# The highest api::needs(N) in the plugin's files, with the file: the plugin API it was written for.
+needs = max(((int(n), f.name) for f in sorted(src.glob("*.rs"))
+             for n in re.findall(r"api::needs\((\d+)\)", f.read_text(errors="replace"))), default=None)
+if manifest.get("horizon") and revision and manifest["horizon"] != revision:
+    sys.exit(f"{pid}: horizon-native.json pins Horizon {manifest['horizon'][:7]} but horizon-mixin.toml's horizon_revision "
+             f"is {revision[:7]}. Set both to the revision in Sunset's horizon-native.json.")
 
-out = pathlib.Path(__file__).resolve().parent.parent / "dist" / f"{pid}-{version}.hnmod"
-out.parent.mkdir(exist_ok=True)
-with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    z.write(plugin / "horizon-native.json", "horizon-native.json")
-    for f in sorted(src.iterdir()):
-        if f.suffix in (".rs", ".toml"):
-            z.write(f, f"mixins/{pid}/{f.name}")
-print(f"Packed {out}")
+
+def read_sunset(path):
+    """Sunset's version, Horizon revision and plugin API version, from a checkout or a .hnmod (None if unreadable)."""
+    try:
+        if path.is_dir():
+            native, api = (path / "horizon-native.json").read_text(), (path / "mixins/sunset/api.rs").read_text()
+        else:
+            with zipfile.ZipFile(path) as z:
+                native, api = z.read("horizon-native.json").decode(), z.read("mixins/sunset/api.rs").decode()
+        m = json.loads(native)
+        v = re.search(r"const API_VERSION: u32 = (\d+);", api)
+        return {"version": m.get("version", "?"), "horizon": m["horizon"], "api": int(v.group(1)) if v else None}
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+        return None
+
+
+def check_against(path):
+    """Stops before anything is installed when the plugin and this Sunset can't be built together."""
+    sunset = read_sunset(path)
+    if sunset is None:
+        sys.exit(f"Can't read Sunset's Horizon revision and plugin API from {path}. Reinstall Sunset (its install "
+                 "script), or pass --sunset <Sunset checkout or .hnmod>. Nothing was installed.")
+    where = f"Sunset {sunset['version']} ({path})"
+    if revision != sunset["horizon"]:
+        sys.exit(f"{pid} pins Horizon {(revision or 'nothing')[:7]} but {where} is built for "
+                 f"{sunset['horizon'][:7]}. Set horizon_revision in mixins/{pid}/horizon-mixin.toml and \"horizon\" "
+                 f"in horizon-native.json to {sunset['horizon']}, or update Sunset or the SDK so they match. "
+                 "Nothing was installed.")
+    if needs and sunset["api"] is not None and needs[0] > sunset["api"]:
+        sys.exit(f"{pid} needs plugin API {needs[0]} (api::needs({needs[0]}) in {needs[1]}) but {where} has plugin "
+                 f"API {sunset['api']}. Update Sunset, or use only API {sunset['api']} calls and declare "
+                 f"needs({sunset['api']}). Nothing was installed.")
+    print(f"{pid} matches {where}: Horizon {sunset['horizon'][:7]}, plugin API {sunset['api']}"
+          + (f" (needs {needs[0]})" if needs else ""))
+
+
+if sunset_arg:
+    check_against(sunset_arg)
+    if "--check" in argv:
+        sys.exit(0)
+
 
 # Horizon's game folder (HORIZON_HOME, else the platform's), and the Native mods instance once a build made it.
 system = platform.system()
@@ -44,6 +97,24 @@ data = data.resolve()
 homes = [h for h in (data, data / "instances" / "native-mods") if (h / "horizon-native-mods").is_dir()]
 if not homes:
     sys.exit(f"No horizon-native-mods folder under {data}: install Sunset first (its install script), then run this again.")
+if not sunset_arg:
+    installed = [m for h in homes for g in ("sunset.hnmod", "sunset-[0-9]*.hnmod")
+                 for m in sorted((h / "horizon-native-mods").glob(g))]
+    if not installed:
+        sys.exit(f"No sunset.hnmod in {homes[0] / 'horizon-native-mods'}: install Sunset first (its install script).")
+    for m in installed:
+        check_against(m)
+    if "--check" in argv:
+        sys.exit(0)
+out = pathlib.Path(__file__).resolve().parent.parent / "dist" / f"{pid}-{version}.hnmod"
+out.parent.mkdir(exist_ok=True)
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    z.write(plugin / "horizon-native.json", "horizon-native.json")
+    for f in sorted(src.iterdir()):
+        if f.suffix in (".rs", ".toml"):
+            z.write(f, f"mixins/{pid}/{f.name}")
+print(f"Packed {out}")
+
 # The launcher otherwise builds whichever instance the user last selected, which may not have this plugin.
 instance = "native-mods" if data / "instances" / "native-mods" in homes else "horizon"
 for h in homes:
