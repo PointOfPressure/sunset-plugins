@@ -3,9 +3,8 @@
 For [Sunset](https://github.com/PointOfPressure/sunset-client) on Horizon `9f42064`, with horizon-mixins `e59da909`.
 Everything in this repo is MIT: copy it, change it, ship your plugin under whatever licence you like.
 
-API 3 is supplied by the pending Baritone integration in Sunset's [`pr37-port`](https://github.com/PointOfPressure/sunset-client/tree/pr37-port)
-branch. Main at `1e4fb18` still supplies API 2. The template and examples use only API 2 calls and declare
-`needs(2)`, so they work on both branches. Declare `needs(3)` when using the optional Baritone service below;
+Sunset's main supplies API 3 since the Baritone integration was merged (`1d1edb9`); Sunset 1.2.1 and earlier
+supply API 2. The template and examples use only API 2 calls and declare `needs(2)`, so they build on both. Declare `needs(3)` when using the optional Baritone service below;
 updating the SDK alone does not update the API inside Sunset. Existing API 1 and 2 calls remain available on API 3.
 
 A Sunset plugin is a small Rust file that adds modules, commands and event handlers to Sunset: anything a built-in
@@ -121,7 +120,7 @@ Ticks are 20 a second. Positions are `[x, y, z]` (`f64` for places, `i32` for bl
 
 | Call | What it does |
 | --- | --- |
-| `api::API_VERSION` | The host's API version: 2 on current main, 3 with the Baritone integration. |
+| `api::API_VERSION` | The host's API version: 3 on Sunset's main, 2 on Sunset 1.2.1 and earlier. |
 | `const _: () = api::needs(2);` | Declare the minimum your calls need: 2 for the template and examples, 3 for the Baritone service. An older host stops the build with "update Sunset". |
 | `api::plugin(game, id, version, setup)` | Registers your plugin the first time (runs `setup`); later calls do nothing. Call it from `tick`. `id`: your mod's id. |
 | `p.id()` | Your plugin's id, inside `setup`. |
@@ -165,7 +164,7 @@ or availability is lost. `register_baritone(service)` returns `Result<(), &'stat
 
 The provider owns the engine library and must never retain a borrowed `Game` after a call returns. This Rust table
 is used inside the compiled native client; its byte requests follow the versioned engine protocol. Use the
-matching [Baritone source and ABI](https://github.com/PointOfPressure/sunset-client/tree/pr37-port/mixins/baritone)
+matching [Baritone source and ABI](https://github.com/PointOfPressure/sunset-client/tree/main/mixins/baritone)
 for operation numbers and request layouts. Stop owned jobs and workers in `on_stop`; do not block that handler on
 a worker waiting for the game thread.
 
