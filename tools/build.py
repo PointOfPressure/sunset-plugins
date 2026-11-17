@@ -136,9 +136,93 @@ if not launcher:
              "(set HORIZON_LAUNCHER to the launcher's path to do it from here).")
 print(f"Building the game for instance {instance} with Sunset and your plugin (this takes a while)...")
 # Match the folder we installed into even when the launcher has a configured data location of its own.
-result = subprocess.run([launcher, "native-build", "--instance", instance, "--trust-native-code"],
-                        env={**os.environ, "HORIZON_HOME": str(data)})
-if result.returncode != 0:
-    sys.exit("The build failed. Read the first `error[...]` above: it names the file and line in your plugin.rs. "
-             "'made for different Horizon revisions': your horizon_revision (in both manifests) must be Sunset's.")
-print(f"Built. Start the game from the launcher's {instance} instance; .plugins lists your plugin.")
+proc = subprocess.Popen([launcher, "native-build", "--instance", instance, "--trust-native-code"],
+                        env={**os.environ, "HORIZON_HOME": str(data)}, stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT, text=True, errors="replace")
+said = []
+for line in proc.stdout:
+    print(line, end="", flush=True)
+    said.append(line.rstrip("\n"))
+code = proc.wait()
+
+
+def launcher_home():
+    """The launcher's data folder (native/build.log is in it): HORIZON_LAUNCHER_HOME, else the platform's."""
+    if os.environ.get("HORIZON_LAUNCHER_HOME"):
+        return pathlib.Path(os.environ["HORIZON_LAUNCHER_HOME"])
+    if system == "Windows":
+        return pathlib.Path(os.environ.get("APPDATA", "")) / "horizon-launcher"
+    if system == "Darwin":
+        return pathlib.Path.home() / "Library" / "Application Support" / "horizon-launcher"
+    return pathlib.Path(os.environ.get("XDG_DATA_HOME", pathlib.Path.home() / ".local" / "share")) / "horizon-launcher"
+
+
+def compile_errors(log):
+    """The compiler's errors in the launcher's log, each as (message, label, source line), the plugin's files'
+    lines found by their text (the launcher pastes plugin.rs into the game's code, so its line numbers differ)."""
+    try:
+        lines = log.read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    files = {f.name: f.read_text(errors="replace").splitlines() for f in sorted(src.glob("*.rs"))}
+    found = []
+    for i, line in enumerate(lines):
+        if not line.startswith("error") or line.startswith(("error: could not compile", "error: aborting")):
+            continue
+        message = line.split(": ", 1)[1] if ": " in line else line
+        # When the launcher builds the plugin alone to see which mod breaks, Sunset's API isn't there: not the bug.
+        if "sunset_api" in message:
+            continue
+        code = label = None
+        at = ""
+        for x in lines[i + 1:i + 12]:
+            if not x.strip() or x.startswith(("error", "warning")):
+                break
+            if x.strip().startswith("-->"):
+                at = x.strip()[4:]
+            m = re.match(r"\s*\d+\s\|\s(.*)$", x)
+            if m and code is None and m.group(1).strip():
+                code = m.group(1).strip()
+            m = re.match(r"\s*\|[\s|^-]*[\^-]\s+((?![\^|-]).+)$", x)
+            if m and label is None:
+                label = m.group(1).strip()
+        where = None
+        if code:
+            for name, text in files.items():
+                hits = [n for n, l in enumerate(text, 1) if l.strip() == code]
+                if hits:
+                    where = f"{name} line {hits[0]}" if len(hits) == 1 else f"{name} lines {', '.join(map(str, hits))}"
+                    break
+        # The launcher's log has each attempt (its Horizon, then the plugin's): the same error once.
+        if not any(f[0] == message and f[4] == code for f in found):
+            found.append((message, label, where, at, code))
+    return found
+
+
+left_out = [l for l in said if re.search(rf"\b{re.escape(pid)} was left out", l)]
+if code == 0 and not left_out:
+    print(f"Built. Start the game from the launcher's {instance} instance; .plugins lists your plugin.")
+    sys.exit(0)
+log = launcher_home() / "native" / "build.log"
+problems = [l for l in said if "made for different Horizon revisions" in l]
+if problems and not left_out:
+    sys.exit(f"{pid}: the build stopped: {problems[0].strip()}\nAnother installed native mod pins a different Horizon "
+             "than Sunset: turn it off in the launcher's Mods page (or delete its .hnmod from horizon-native-mods), "
+             "then run this again.")
+errors = compile_errors(log) or []
+ours = [e for e in errors if e[2]]
+head = (f"{pid} didn't compile, so the launcher left it out of the game (it says 'made for another Horizon "
+        f"version' for any error)." if left_out else f"The build failed (launcher exit {code}).")
+if ours:
+    detail = "\n".join(f"  {where}: {message}" + (f" ({label})" if label else "") + f"\n      {code_line}"
+                       for message, label, where, _, code_line in ours[:5])
+    more = f"\n  ...and {len(ours) - 5} more" if len(ours) > 5 else ""
+    sys.exit(f"{head}\nIn mixins/{pid}/:\n{detail}{more}\nFix it and run tools/build.py again. "
+             f"The compiler's full output: {log}")
+if errors:
+    detail = "\n".join(f"  {message} at {at or '?'}" for message, _, _, at, _ in errors[:3])
+    sys.exit(f"{head}\nThe errors aren't in {pid}'s files (Sunset's or Horizon's code, or code your tick.rs or an "
+             f"injection pastes in):\n{detail}\nCheck that Sunset is up to date and your plugin's [[injection]] "
+             f"bindings match the template. The compiler's full output: {log}")
+sys.exit(f"{head}\nRead the first `error[...]` in the launcher's output above, or in {log}. 'made for "
+         "different Horizon revisions': your horizon_revision (in both manifests) must be Sunset's.")

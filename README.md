@@ -395,6 +395,7 @@ p.on_join(|game| if api::is_on("My AFK") { api::chat(game, "back in after a reco
 | --- | --- |
 | `x pins Horizon ... but Sunset ... is built for ...` (build.py) | Set both pins to the revision it prints, or update Sunset or this SDK so they match. |
 | `x needs plugin API N ... but Sunset ... has plugin API M` (build.py), or `this plugin needs a newer Sunset plugin API...` while building | Update Sunset (its install script), then build again; or use only API M calls and declare `needs(M)`. |
+| `x didn't compile, so the launcher left it out` (build.py) | The launcher builds the game without a plugin that fails to compile (its own line says "made for another Horizon version"). build.py prints the file, line and error below it; fix that and build again. |
 | `made for different Horizon revisions` | Set `horizon_revision` (horizon-mixin.toml) and `horizon` (horizon-native.json) to the commit in Sunset's `horizon-native.json`. |
 | `cannot find function ... in module api` | Check the name in this page; `api::` calls need `use super::sunset_api as api;`. |
 | `expected closure that takes 2 arguments` | The handler takes the arguments its row above shows: `\|game, args\|` for a command, `\|game\|` for a tick. |

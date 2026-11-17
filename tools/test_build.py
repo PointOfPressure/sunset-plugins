@@ -62,9 +62,10 @@ class BuildTests(unittest.TestCase):
     def run_raw(self, env, *args):
         """Runs build.py; gives the mocked launcher, the exit code or message, and what it printed."""
         with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", [str(self.script), str(self.plugin), *args]), \
-             patch("platform.system", return_value="Windows"), patch("subprocess.run") as launcher, \
+             patch("platform.system", return_value="Windows"), patch("subprocess.Popen") as launcher, \
              contextlib.redirect_stdout(io.StringIO()) as printed:
-            launcher.return_value.returncode = 0
+            launcher.return_value.stdout = iter(line + "\n" for line in getattr(self, "output", []))
+            launcher.return_value.wait.return_value = getattr(self, "exit", 0)
             code = None
             try:
                 runpy.run_path(str(self.script), run_name="__main__")
@@ -141,7 +142,7 @@ class BuildTests(unittest.TestCase):
     def test_matching_plugin_says_so_and_builds(self):
         self.mods(self.game)
         launcher, code, printed = self.run_raw({"HORIZON_HOME": str(self.game), "HORIZON_LAUNCHER": "mock-launcher"})
-        self.assertIsNone(code)
+        self.assertIn(code, (None, 0))
         self.assertIn("wave matches Sunset 1.2.1", printed)
         self.assertIn("plugin API 2 (needs 2)", printed)
         launcher.assert_called_once()
@@ -212,6 +213,90 @@ class BuildTests(unittest.TestCase):
     def test_sunset_flag_without_a_path(self):
         _, code, _ = self.run_raw({}, "--sunset")
         self.assertIn("--sunset needs a path", code)
+
+    # ---- what a failed build says
+
+    def failed_build(self, output, log=None, exit=0):
+        """A build whose launcher printed `output` and wrote `log` as native/build.log; gives build.py's message."""
+        self.mods(self.game)
+        self.output, self.exit = output, exit
+        launcher_home = self.root / "launcher-data"
+        if log is not None:
+            (launcher_home / "native").mkdir(parents=True)
+            (launcher_home / "native" / "build.log").write_text(log)
+        _, code, printed = self.run_raw({"HORIZON_HOME": str(self.game), "HORIZON_LAUNCHER": "mock-launcher",
+                                         "HORIZON_LAUNCHER_HOME": str(launcher_home)})
+        return code, printed
+
+    def plugin_source(self, plugin, tick=None):
+        source = self.plugin / "mixins" / "wave"
+        (source / "plugin.rs").write_text(plugin)
+        if tick is not None:
+            (source / "tick.rs").write_text(tick)
+
+    ISOLATED = """error[E0432]: unresolved import `super::sunset_api`
+     --> crates/horizon-client/src/game.rs:21761:9
+      |
+21761 |     use super::sunset_api as api;
+      |         ^^^^^^^----------^^^^^^^
+      |                |
+      |                no `sunset_api` in `game`
+
+"""
+    MISMATCH = """error[E0308]: mismatched types
+     --> crates/horizon-client/src/game.rs:21765:27
+      |
+21765 |         let broken: u32 = "not a number";
+      |                     ---   ^^^^^^^^^^^^^^ expected `u32`, found `&str`
+      |                     |
+      |                     expected due to this
+
+error: could not compile `horizon-client` (lib) due to 2 previous errors
+"""
+
+    def test_compile_error_names_the_plugin_file_and_line(self):
+        self.plugin_source('use super::sunset_api as api;\nconst _: () = api::needs(2);\npub(super) fn tick() {\n'
+                           '    let broken: u32 = "not a number";\n}\n')
+        code, printed = self.failed_build(["[ 1:30] wave was left out: made for another Horizon version",
+                                           "native-9f42064-abc built and selected for its instance (9 s)."],
+                                          self.MISMATCH + self.ISOLATED + self.MISMATCH)
+        self.assertIn("wave didn't compile, so the launcher left it out", code)
+        self.assertIn("plugin.rs line 4: mismatched types (expected `u32`, found `&str`)", code)
+        self.assertIn('let broken: u32 = "not a number";', code)
+        self.assertNotIn("sunset_api", code)
+        self.assertEqual(code.count("plugin.rs line 4"), 1)
+        self.assertIn("build.log", code)
+        self.assertNotIn("Built.", printed)
+        self.assertIn("wave was left out", printed)
+
+    def test_compile_error_in_tick_rs_and_repeated_lines(self):
+        self.plugin_source("// plugin\n", tick='// tick\nlet broken: u32 = "not a number";\nlet broken: u32 = "not a number";\n')
+        code, _ = self.failed_build(["wave was left out: made for another Horizon version"], self.MISMATCH)
+        self.assertIn("tick.rs lines 2, 3: mismatched types", code)
+
+    def test_error_outside_the_plugin_says_so(self):
+        code, _ = self.failed_build(["wave was left out: made for another Horizon version"],
+                                    self.MISMATCH.replace('let broken: u32 = "not a number";', "let x: u8 = sunset_thing();"))
+        self.assertIn("aren't in wave's files", code)
+        self.assertIn("mismatched types at crates/horizon-client/src/game.rs:21765:27", code)
+
+    def test_left_out_without_a_build_log(self):
+        code, _ = self.failed_build(["wave was left out: made for another Horizon version"])
+        self.assertIn("wave didn't compile", code)
+        self.assertIn("Read the first `error[...]`", code)
+
+    def test_failed_launcher_with_other_revisions(self):
+        code, _ = self.failed_build(["error: These mods were made for different Horizon revisions: wave, mousetricks"], exit=1)
+        self.assertIn("Another installed native mod pins a different Horizon", code)
+
+    def test_failed_launcher_exit_code(self):
+        code, _ = self.failed_build(["error: out of disk space"], "", exit=2)
+        self.assertIn("The build failed (launcher exit 2)", code)
+
+    def test_another_mod_left_out_is_not_ours(self):
+        _, printed = self.failed_build(["newwave was left out: made for another Horizon version",
+                                        "wave2 was left out: made for another Horizon version"])
+        self.assertIn("Built.", printed)
 
 
 if __name__ == "__main__":
