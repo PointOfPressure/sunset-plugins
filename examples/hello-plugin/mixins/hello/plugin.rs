@@ -1,11 +1,11 @@
-// Hello, an example Sunset plugin (plugin API 2): a module with settings, a chat command, a HUD line, a box in the
+// Hello, an example Sunset plugin (plugin API 3): a module with settings, a chat command, a HUD line, a box in the
 // world, a packet handler, enable/disable handlers, a timer and a value kept across restarts.
 
 use super::Game;
 use super::sunset_api as api;
 
-// Stops the build with "update Sunset" on a Sunset older than plugin API 2.
-const _: () = api::needs(2);
+// Stops the build with "update Sunset" on a Sunset older than plugin API 3.
+const _: () = api::needs(3);
 
 const ID: &str = "hello";
 

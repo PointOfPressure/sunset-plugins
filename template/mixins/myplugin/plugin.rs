@@ -3,8 +3,8 @@
 use super::Game;
 use super::sunset_api as api;
 
-// A Sunset older than plugin API 2 stops the build here with "update Sunset".
-const _: () = api::needs(2);
+// A Sunset older than plugin API 3 stops the build here with "update Sunset".
+const _: () = api::needs(3);
 
 const ID: &str = "myplugin";
 const NAME: &str = "My Module";
