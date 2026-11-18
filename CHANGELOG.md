@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `build.py --sunset` takes a sunset-client checkout in its workspace layout (Sunset in `client/`) as well as the
+  older layout; the Baritone link points at `client/mixins/baritone`.
+
 ## Pre-launch (17 Nov 2026, API 2, Sunset after 1.2.1)
 
 - `api::forget(game, ID, key)` and `api::forget_all(game, ID)` delete saved data (one key, or all of a plugin's).

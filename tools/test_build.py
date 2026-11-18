@@ -209,6 +209,24 @@ class BuildTests(unittest.TestCase):
         _, code, _ = self.run_raw({}, "--check", "--sunset", str(checkout))
         self.assertIn("needs plugin API 3", code)
 
+    def test_check_against_a_workspace_checkout(self):
+        checkout = self.root / "sunset-client"
+        (checkout / "client" / "mixins" / "sunset").mkdir(parents=True)
+        (checkout / "client" / "horizon-native.json").write_text(json.dumps({"version": "2.0.0", "horizon": REV}))
+        (checkout / "client" / "mixins" / "sunset" / "api.rs").write_text("pub(super) const API_VERSION: u32 = 3;\n")
+        self.set_plugin(needs="const _: () = api::needs(3);")
+        for where in (checkout, checkout / "client"):
+            launcher, code, printed = self.run_raw({"HORIZON_LAUNCHER": "mock-launcher"}, "--check", "--sunset", str(where))
+            self.assertEqual(code, 0)
+            self.assertIn("wave matches Sunset 2.0.0", printed)
+            launcher.assert_not_called()
+        (checkout / "client" / "mixins" / "sunset" / "api.rs").write_text("pub(super) const API_VERSION: u32 = 2;\n")
+        _, code, _ = self.run_raw({}, "--check", "--sunset", str(checkout))
+        self.assertIn("needs plugin API 3", code)
+        (checkout / "client" / "horizon-native.json").unlink()
+        _, code, _ = self.run_raw({}, "--check", "--sunset", str(checkout))
+        self.assertNotEqual(code, 0)
+
     def test_newer_installed_sunset_package_is_checked_too(self):
         mods = self.mods(self.game)
         (mods / "sunset-1.3.0.hnmod").write_bytes(sunset_package(horizon=OTHER, version="1.3.0"))

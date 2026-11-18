@@ -164,7 +164,7 @@ or availability is lost. `register_baritone(service)` returns `Result<(), &'stat
 
 The provider owns the engine library and must never retain a borrowed `Game` after a call returns. This Rust table
 is used inside the compiled native client; its byte requests follow the versioned engine protocol. Use the
-matching [Baritone source and ABI](https://github.com/PointOfPressure/sunset-client/tree/main/mixins/baritone)
+matching [Baritone source and ABI](https://github.com/PointOfPressure/sunset-client/tree/main/client/mixins/baritone)
 for operation numbers and request layouts. Stop owned jobs and workers in `on_stop`; do not block that handler on
 a worker waiting for the game thread.
 

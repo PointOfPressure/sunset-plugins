@@ -47,6 +47,9 @@ def read_sunset(path):
     """Sunset's version, Horizon revision and plugin API version, from a checkout or a .hnmod (None if unreadable)."""
     try:
         if path.is_dir():
+            # A sunset-client checkout keeps Sunset in client/ (the old .hnmod-line layout had it at the top).
+            if not (path / "horizon-native.json").is_file() and (path / "client" / "horizon-native.json").is_file():
+                path = path / "client"
             native, api = (path / "horizon-native.json").read_text(), (path / "mixins/sunset/api.rs").read_text()
         else:
             with zipfile.ZipFile(path) as z:
