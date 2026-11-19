@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sunset's main reserves the `relog` command name (`.relog [seconds]`); a plugin command called `relog` is refused.
 - `build.py --sunset` takes a sunset-client checkout in its workspace layout (Sunset in `client/`) as well as the
   older layout; the Baritone link points at `client/mixins/baritone`.
 

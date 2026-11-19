@@ -220,10 +220,11 @@ a chat line, ignoring case. The API 3 host reserves these built-in names:
 auradebug scan goto help commands menu gui pages toggle t modules list settings
 get set seed movementpreset bind binds panic debug profile profiles config cfg preset
 presets reset friend friends f loadout loadouts waypoint waypoints wp vclip hclip
-plugins baritone b
+plugins baritone b relog
 ```
 
-API 3 additionally reserves `seed` for Ore Sim and `baritone`/`b` for Baritone. Keep these names free even when
+API 3 additionally reserves `seed` for Ore Sim and `baritone`/`b` for Baritone; Sunset after 1.2.1 also reserves
+`relog` (the `.relog` command). Keep these names free even when
 targeting API 2 so your commands still work after updating Sunset; use a name such as `myplugin-seed` instead.
 
 ### Events
