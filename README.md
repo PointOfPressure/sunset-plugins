@@ -355,7 +355,8 @@ Ticks count only in a world: a timer waits while you are disconnected and goes o
 | `api::forget(game, ID, key)` | Deletes one key: `api::forget(game, ID, "count")?;` gives `Ok(true)` if there was a value. |
 | `api::forget_all(game, ID)` | Deletes all your keys: `let n = api::forget_all(game, ID)?;` gives how many. Other files and folders there stay. |
 
-One file per key in `horizon-mods/.horizon-mod-data/<your id>/`; an unchanged value isn't written again. Keys: letters,
+One file per key in `horizon-mods/.horizon-mod-data/sunset/plugins/<your id>/`, written by Sunset (a value saved by an
+older Sunset in `.horizon-mod-data/<your id>/` is still loaded); an unchanged value isn't written again. Keys: letters,
 digits, `-`, `_` and `.`, not starting with `.` (no paths: `../x` or `a/b` gives `Err`). Your module's settings are saved by Sunset already: use this for anything else. Plain
 `static` values in your plugin outlast disconnects and reconnects (they go when the game closes).
 `forget` and `forget_all` came after Sunset 1.2.1 without a new API number (3 is the Baritone service's); on an
